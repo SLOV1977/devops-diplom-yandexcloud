@@ -34,6 +34,8 @@ jobs:
           fi
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.0
 
       - name: Bootstrap init
         if: steps.bucket.outputs.exists == 'false'
