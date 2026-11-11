@@ -40,7 +40,7 @@ variable "control_plane_flavor" {
     memory = number
   })
   default = {
-    cores  = 2
+    cores  = 4
     memory = 4
   }
 }
