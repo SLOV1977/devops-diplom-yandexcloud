@@ -13,10 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Write SA key
+      - name: Write SA key (base64 decode)
         run: |
           mkdir -p ~/.yc
-          echo "${{ secrets.YC_SA_KEY_JSON }}" > ~/.yc/terraform-infra-key.json
+          echo "${{ secrets.YC_SA_KEY_JSON_B64 }}" | base64 -d > ~/.yc/terraform-infra-key.json
           chmod 600 ~/.yc/terraform-infra-key.json
           echo "SA_KEY_PATH=$HOME/.yc/terraform-infra-key.json" >> "$GITHUB_ENV"
 
