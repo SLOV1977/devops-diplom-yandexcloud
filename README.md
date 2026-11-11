@@ -53,7 +53,7 @@
 ---
 ### Решение. Создание облачной инфраструктуры.
 
-1. Создаём сервисный аккаунт с правами `editor` и `S3 bucket`, в созданном ЯО аккаунте (создание бакета через TF) [**main.tf**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/terraform/bootstrap/main.tf).  
+**1.** Создаём сервисный аккаунт с правами `editor` и `S3 bucket`, в созданном ЯО аккаунте (создание бакета через TF) [**main.tf**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/terraform/bootstrap/main.tf).  
 
 ```
 cd terraform/bootstrap
@@ -92,7 +92,7 @@ export BUCKET_NAME="$(terraform output -raw state_bucket)"
 echo "Бакет стейта: $BUCKET_NAME"
 ```
 
-2. Создаём конфигурацию Terrafrom [**main.tf**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/terraform/main/main.tf), используя созданный ранее бакет как бекенд для хранения стейт файла.
+**2.** Создаём конфигурацию Terrafrom [**main.tf**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/terraform/main/main.tf), используя созданный ранее бакет как бекенд для хранения стейт файла.
 
 ```
 cd ../main
@@ -120,7 +120,7 @@ terraform apply
 
 ![`S3-bucket` c файлом настройки](img/007.png)
 
-3. Убеждаемся, что теперь команды terraform destroy и terraform apply выполняются без дополнительных ручных действий.
+**3.** Убеждаемся, что теперь команды terraform destroy и terraform apply выполняются без дополнительных ручных действий.
 
 ```
 terraform destroy && terraform apply
@@ -156,7 +156,7 @@ terraform destroy && terraform apply
 
 ### Решение. Создание Kubernetes кластера  
 
-1. При создании инфраструктуры при помощи `Terraform` были созданы ВМ в разных подсетях и зонах доступности для создания кластера Kubernetes ("cp-1" - `control-plane` (master), "wk-1" и "wk-2" - воркеры).  
+**1.** При создании инфраструктуры при помощи `Terraform` были созданы ВМ в разных подсетях и зонах доступности для создания кластера Kubernetes ("cp-1" - `control-plane` (master), "wk-1" и "wk-2" - воркеры).  
 Генерируем ansible-инвентарь для установки Kubernetes кластера.
 
 ```
@@ -167,18 +167,18 @@ cat ../../ansible/inventory/hosts.yaml
 
 ![Содержание сгенерированного `hosts.yaml`](img/009.png)
 
-2. Создаём ansible конфигурацию для установки Kubernetes кластера.
+**2.** Создаём ansible конфигурацию для установки Kubernetes кластера.
 
 - Оновной плейбук - [**playbook.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/playbook.yml)
 - Подготовка всех нод:
-  1. Предварительная подготовка `prereq` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/prereq/tasks/main.yml)  
-  2. Установка `containerd` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/containerd/tasks/main.yml)  
-  3. Установка `kubeadm` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/kubeadm/tasks/main.yml)  
+  - Предварительная подготовка `prereq` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/prereq/tasks/main.yml)  
+  - Установка `containerd` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/containerd/tasks/main.yml)  
+  - Установка `kubeadm` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/kubeadm/tasks/main.yml)  
 - Инициализация `control-plane` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/control-plane/tasks/main.yml)  
 - Подключение worker-нод - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/join-workers/tasks/main.yml)  
 - Настройка локального kubeconfig - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/join-workers/tasks/main.yml)  
 
-3. Установка Kubernetes через ansible.  
+**3.** Установка Kubernetes через ansible.  
 
 Плейбук последовательно прогоняет роли: `prereq` (`sysctl`, `swap`, модули ядра) → `containerd` → `kubeadm` на всех нодах, затем инициализирует `control-plane`, подключает воркеров и забирает `kubeconfig`.
 
@@ -186,7 +186,7 @@ cat ../../ansible/inventory/hosts.yaml
 cd ../../ansible
 ansible-playbook -i inventory/hosts.yaml playbook.yml -b -u ubuntu
 ```
-4. Настраиваем kubeconfig и проверяем кластер
+**4.** Настраиваем kubeconfig и проверяем кластер
 
 ```
 mkdir -p ~/.kube
@@ -225,8 +225,8 @@ kubectl get pods --all-namespaces
 ---
 ### Решение. Создание тестового приложения
 
-1. Создаем отдельный [репозиторий](https://github.com/SLOV1977/devops-diplom-app) для тестового приложения.  
-2. Создаем статичную web-страницу:  
+**1.** Создаем отдельный [репозиторий](https://github.com/SLOV1977/devops-diplom-app) для тестового приложения.  
+**2.** Создаем статичную web-страницу:  
 
 ```
 <!DOCTYPE html>
@@ -285,7 +285,7 @@ kubectl get pods --all-namespaces
 </body>
 </html>
 ```
-3. Подготавливаем `Dockerfile` для создания образа приложения:  
+**3.** Подготавливаем `Dockerfile` для создания образа приложения:  
 
 ```
 FROM nginx:1.27-alpine
@@ -297,7 +297,7 @@ EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O - http://localhost/ || exit 1
 ```
-4. Создаём образ приложения:  
+**4.** Создаём образ приложения:  
 
 ```
 docker build -t slov1977/devops-diplom-app:v1.0.0 .
@@ -306,7 +306,7 @@ docker build -t slov1977/devops-diplom-app:v1.0.0 .
 
 ![Создаём образ приложения](img/011.png)
 
-5. Проверяем созданный образ:  
+**5.** Проверяем созданный образ:  
 
 ```
 docker images
@@ -315,7 +315,7 @@ docker images
 
 ![Созданный образ приложения](img/012.png)
 
-6. Публикуем образ в Docker Hub:  
+**6.** Публикуем образ в Docker Hub:  
 
 ```
 docker push slov1977/devops-diplom-app:v1.0.0
@@ -346,26 +346,26 @@ docker push slov1977/devops-diplom-app:v1.0.0
 ---
 ### Решение. Подготовка cистемы мониторинга и деплой приложения
 
-1. local-path-provisioner — чтобы у Prometheus, Grafana и Alertmanager были PVC:  
+**1.** local-path-provisioner — чтобы у Prometheus, Grafana и Alertmanager были PVC:  
 
 ```
 kubectl get storageclass
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
 ```
-2. Лейблы нод. Контроллер ingress-nginx с nodeSelector должен знать, куда идти (иначе может улететь на cp-1, и smoke test и Grafana останутся без входа):  
+**2.** Лейблы нод. Контроллер ingress-nginx с nodeSelector должен знать, куда идти (иначе может улететь на cp-1, и smoke test и Grafana останутся без входа):  
 
 ```
 kubectl label node cp-1 role=control --overwrite
 kubectl label node wk-1 wk-2 role=worker --overwrite
 ```
-3. Репозитории helm:  
+**3.** Репозитории helm:  
 
 ```
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 ```
-4. ingress-nginx — hostNetwork и hostPort, чтобы порт 80 слушался прямо на ноде:  
+**4.** ingress-nginx — hostNetwork и hostPort, чтобы порт 80 слушался прямо на ноде:  
 
 ```
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
@@ -388,7 +388,7 @@ kubectl -n ingress-nginx get pods -w
 ![Под контроллера запущен](img/015.png)
 
 
-5. Установка `kube-prometheus-stack`. Шаблон values содержит ${GRAFANA_EXTERNAL_IP}, который надо подставить вручную (в deploy.sh это делает envsubst):  
+**5.** Установка `kube-prometheus-stack`. Шаблон values содержит ${GRAFANA_EXTERNAL_IP}, который надо подставить вручную:  
 
 [**kps-values.yaml.template**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/monitoring/kps-values.yaml.template)  
 
@@ -405,7 +405,7 @@ helm upgrade --install kps prometheus-community/kube-prometheus-stack \
 
 ![Результат выполнения](img/016.png)
 
-6. Установка `Ingress Grafana`:  
+**6.** Установка `Ingress Grafana`:  
 
 [**grafana-ingress.yaml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/monitoring/grafana-ingress.yaml)  
 
@@ -423,13 +423,13 @@ kubectl get pods -A -w
 
 ![Поды активны](img/017.png)
 
-7. Проверяем web-интерфейс Grafana и проходим авторизацию с заранее заданным в grafana-values.yaml паролем. Проверяем состояние кластера:  
+**7.** Проверяем web-интерфейс Grafana и проходим авторизацию с заранее заданным в grafana-values.yaml паролем. Проверяем состояние кластера:  
 
 ![Мониторинг работает](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/018.png)
 
 ![Мониторинг работает](img/018.png)
 
-8. Установка приложения.  
+**8.** Установка приложения.  
 
 [**manifests.yaml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/app/manifests.yaml)  
 
@@ -541,9 +541,9 @@ kubectl -n app get pods -o wide
 
 - Web-страница приложения обновилась.
 
-![Страница приложения в браузере](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/027.png)
+![Скрин страницы приложения в браузере](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/027.png)
 
-![Страница приложения в браузере](img/027.png)
+![Скрин страницы приложения в браузере](img/027.png)
 
 Автоматическая сборка docker-image с новым тегом и деплой приложения в кластер прошли успешно.  
 

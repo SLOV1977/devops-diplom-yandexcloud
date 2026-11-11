@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: devops-diplom-app
-          image: APP_IMAGE   # подменяется deploy.sh (DOCKERHUB_USER + тег)
+          image: APP_IMAGE
           imagePullPolicy: Always
           ports:
             - containerPort: 80
