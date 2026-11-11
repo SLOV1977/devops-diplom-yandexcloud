@@ -1,0 +1,37 @@
+- name: Проверить, инициализирован ли кластер
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf
+
+- name: kubeadm init
+  ansible.builtin.command:
+    cmd: >
+      kubeadm init
+      --pod-network-cidr={{ pod_cidr }}
+      --service-cidr={{ service_cidr }}
+      --apiserver-cert-extra-sans={{ ansible_host }}
+  when: not admin_conf.stat.exists
+  register: kubeadm_init
+  changed_when: true
+
+- name: Сгенерировать join-команду
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_command
+  changed_when: false
+
+- name: Сохранить join-команду в факт на localhost
+  ansible.builtin.set_fact:
+    kubeadm_join_cmd: "{{ join_command.stdout }}"
+  delegate_to: localhost
+  delegate_facts: true
+
+- name: Установить CNI (flannel) с ретраями
+  ansible.builtin.command: kubectl apply -f {{ cni_manifest }}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: cni_apply
+  when: not admin_conf.stat.exists
+  changed_when: true
+  retries: 10
+  delay: 10
+  until: cni_apply.rc == 0

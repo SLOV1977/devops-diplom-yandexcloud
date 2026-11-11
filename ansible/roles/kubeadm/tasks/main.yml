@@ -1,0 +1,25 @@
+- name: Ключ и репозиторий Kubernetes
+  ansible.builtin.shell: |
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL --max-time 60 --retry 3 \
+      https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/Release.key \
+      | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb /" \
+      > /etc/apt/sources.list.d/kubernetes.list
+  changed_when: true
+
+- name: Обновить кеш apt
+  ansible.builtin.apt:
+    update_cache: true
+  changed_when: false
+
+- name: Установить kubelet, kubeadm, kubectl
+  ansible.builtin.apt:
+    name: [kubelet, kubeadm, kubectl]
+    state: present
+
+- name: Заблокировать обновление пакетов kube*
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [kubelet, kubeadm, kubectl]

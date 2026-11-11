@@ -1,0 +1,4 @@
+kubernetes_version: "1.30"
+pod_cidr: "10.244.0.0/16"      # flannel работает именно с этой подсетью
+service_cidr: "10.96.0.0/12"
+cni_manifest: "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"

@@ -1,4 +1,4 @@
-# Дипломный практикум в Yandex.Cloud
+# `Дипломный практикум в Yandex.Cloud` - `Рахманов Александр`
   * [Цели:](#цели)
   * [Этапы выполнения:](#этапы-выполнения)
      * [Создание облачной инфраструктуры](#создание-облачной-инфраструктуры)
@@ -48,7 +48,88 @@
 Ожидаемые результаты:
 
 1. Terraform сконфигурирован и создание инфраструктуры посредством Terraform возможно без дополнительных ручных действий, стейт основной конфигурации сохраняется в бакете или Terraform Cloud
-2. Полученная конфигурация инфраструктуры является предварительной, поэтому в ходе дальнейшего выполнения задания возможны изменения.
+2. Полученная конфигурация инфраструктуры является предварительной, поэтому в ходе дальнейшего выполнения задания возможны изменения.  
+
+---
+### Решение. Создание облачной инфраструктуры.
+
+1. Создаём сервисный аккаунт с правами `editor` и `S3 bucket`, в созданном ЯО аккаунте (создание бакета через TF) [**main.tf**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/terraform/bootstrap/main.tf).  
+
+```
+cd terraform/bootstrap
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+![Создание сервисного аккаунта и `S3 bucket`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/001.png)
+
+![Создание сервисного аккаунта и `S3 bucket`](img/001.png)
+
+
+![Сервисный аккаунт с правами `editor`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/002.png)
+
+![Сервисный аккаунт с правами `editor`](img/002.png)
+
+
+![`S3 bucket`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/003.png)
+
+![`S3 bucket`](img/003.png)
+
+Теперь забираем выходы. Авторизационный ключ `SA` — в файл для конфигурации `main`:  
+
+```
+terraform output -raw infra_authorized_key_json > ../main/terraform-infra-key.json
+chmod 600 ../main/terraform-infra-key.json
+```
+
+Статические ключи для `S3 bucket` — в переменные окружения:  
+
+```
+export AWS_ACCESS_KEY_ID="$(terraform output -raw state_access_key)"
+export AWS_SECRET_ACCESS_KEY="$(terraform output -raw state_secret_key)"
+export BUCKET_NAME="$(terraform output -raw state_bucket)"
+echo "Бакет стейта: $BUCKET_NAME"
+```
+
+2. Создаём конфигурацию Terrafrom [**main.tf**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/terraform/main/main.tf), используя созданный ранее бакет как бекенд для хранения стейт файла.
+
+```
+cd ../main
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+![`Outputs` после `terraform apply`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/004.png)
+
+![`Outputs` после `terraform apply`](img/004.png)
+
+
+![VPC с подсетями в разных зонах доступности](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/005.png)
+
+![VPC с подсетями в разных зонах доступности](img/005.png)
+
+
+![Созданные ВМ в разных подсетях и зонах доступности](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/006.png)
+
+![Созданные ВМ в разных подсетях и зонах доступности](img/006.png)
+
+
+![`S3-bucket` c файлом настройки](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/007.png)
+
+![`S3-bucket` c файлом настройки](img/007.png)
+
+3. Убеждаемся, что теперь команды terraform destroy и terraform apply выполняются без дополнительных ручных действий.
+
+```
+terraform destroy && terraform apply
+```
+![Вывод `Outputs` после `terraform destroy && terraform apply`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/008.png)
+
+![Вывод `Outputs` после `terraform destroy && terraform apply`](img/008.png)
+
+Инфраструктура удалена и создана заново без дополнительных ручных действий.  
 
 ---
 ### Создание Kubernetes кластера
@@ -72,6 +153,58 @@
 3. Команда `kubectl get pods --all-namespaces` отрабатывает без ошибок.
 
 ---
+
+### Решение. Создание Kubernetes кластера  
+
+1. При создании инфраструктуры при помощи `Terraform` были созданы ВМ в разных подсетях и зонах доступности для создания кластера Kubernetes ("cp-1" - `control-plane` (master), "wk-1" и "wk-2" - воркеры).  
+Генерируем ansible-инвентарь для установки Kubernetes кластера.
+
+```
+terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yaml
+cat ../../ansible/inventory/hosts.yaml
+```
+![Содержание сгенерированного `hosts.yaml`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/009.png)
+
+![Содержание сгенерированного `hosts.yaml`](img/009.png)
+
+2. Создаём ansible конфигурацию для установки Kubernetes кластера.
+
+- Оновной плейбук - [**playbook.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/playbook.yml)
+- Подготовка всех нод:
+  1. Предварительная подготовка `prereq` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/prereq/tasks/main.yml)  
+  2. Установка `containerd` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/containerd/tasks/main.yml)  
+  3. Установка `kubeadm` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/kubeadm/tasks/main.yml)  
+- Инициализация `control-plane` - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/control-plane/tasks/main.yml)  
+- Подключение worker-нод - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/join-workers/tasks/main.yml)  
+- Настройка локального kubeconfig - [**main.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/ansible/join-workers/tasks/main.yml)  
+
+3. Установка Kubernetes через ansible.  
+
+Плейбук последовательно прогоняет роли: `prereq` (`sysctl`, `swap`, модули ядра) → `containerd` → `kubeadm` на всех нодах, затем инициализирует `control-plane`, подключает воркеров и забирает `kubeconfig`.
+
+```
+cd ../../ansible
+ansible-playbook -i inventory/hosts.yaml playbook.yml -b -u ubuntu
+```
+4. Настраиваем kubeconfig и проверяем кластер
+
+```
+mkdir -p ~/.kube
+cp inventory/artifacts/admin.conf ~/.kube/diplom.conf
+chmod 600 ~/.kube/diplom.conf
+export KUBECONFIG=~/.kube/diplom.conf
+echo 'export KUBECONFIG=~/.kube/diplom.conf' >> ~/.bashrc
+source ~/.bashrc
+kubectl get nodes
+kubectl get pods --all-namespaces
+```
+![Созданный Kubernetes кластер](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/010.png)
+
+![Созданный Kubernetes кластер](img/010.png)
+
+Кластер успешно создан.
+
+---
 ### Создание тестового приложения
 
 Для перехода к следующему этапу необходимо подготовить тестовое приложение, эмулирующее основное приложение разрабатываемое вашей компанией.
@@ -90,6 +223,114 @@
 2. Регистри с собранным docker image. В качестве регистри может быть DockerHub или [Yandex Container Registry](https://cloud.yandex.ru/services/container-registry), созданный также с помощью terraform.
 
 ---
+### Решение. Создание тестового приложения
+
+1. Создаем отдельный [репозиторий](https://github.com/SLOV1977/devops-diplom-app) для тестового приложения.  
+2. Создаем статичную web-страницу:  
+
+```
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дипломный проект DevOps</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 Дипломный практикум в Yandex.Cloud</h1>
+            <p>Выполнил: Рахманов Александр</p>
+        </header>
+        
+        <main>
+            <section class="status">
+                <h2>Статус системы</h2>
+                <div class="status-cards">
+                    <div class="card online">
+                        <h3>Приложение</h3>
+                        <p>🟢 Онлайн</p>
+                    </div>
+                    <div class="card online">
+                        <h3>Кластер Kubernetes</h3>
+                        <p>🟢 Работает</p>
+                    </div>
+                    <div class="card online">
+                        <h3>Мониторинг</h3>
+                        <p>🟢 Активен</p>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="components">
+                <h2>Компоненты системы</h2>
+                <ul>
+                    <li>✅ Yandex Cloud Infrastructure</li>
+                    <li>✅ Kubernetes Cluster</li>
+                    <li>✅ Docker Registry</li>
+                    <li>✅ Prometheus + Grafana</li>
+                    <li>✅ CI/CD Pipeline</li>
+                </ul>
+            </section>
+        </main>
+        
+        <footer>
+            <p>Время сервера: <span id="server-time"></span></p>
+            <p>Версия: 1.0.0</p>
+        </footer>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
+```
+3. Подготавливаем `Dockerfile` для создания образа приложения:  
+
+```
+FROM nginx:1.27-alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY index.html /usr/share/nginx/html/index.html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O - http://localhost/ || exit 1
+```
+4. Создаём образ приложения:  
+
+```
+docker build -t slov1977/devops-diplom-app:v1.0.0 .
+```
+![Создаём образ приложения](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/011.png)
+
+![Создаём образ приложения](img/011.png)
+
+5. Проверяем созданный образ:  
+
+```
+docker images
+```
+![Созданный образ приложения](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/012.png)
+
+![Созданный образ приложения](img/012.png)
+
+6. Публикуем образ в Docker Hub:  
+
+```
+docker push slov1977/devops-diplom-app:v1.0.0
+```
+![Публикуем образ в Docker Hub](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/013.png)
+
+![Публикуем образ в Docker Hub](img/013.png)
+
+Образ приложения размещён в Docker Hub.
+
+![Образ приложения в Docker Hub](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/014.png)
+
+![Образ приложения в Docker Hub](img/014.png)
+
+---
 ### Подготовка cистемы мониторинга и деплой приложения
 
 Уже должны быть готовы конфигурации для автоматического создания облачной инфраструктуры и поднятия Kubernetes кластера.  
@@ -102,6 +343,127 @@
 Способ выполнения:
 1. Воспользоваться пакетом [kube-prometheus](https://github.com/prometheus-operator/kube-prometheus), который уже включает в себя [Kubernetes оператор](https://operatorhub.io/) для [grafana](https://grafana.com/), [prometheus](https://prometheus.io/), [alertmanager](https://github.com/prometheus/alertmanager) и [node_exporter](https://github.com/prometheus/node_exporter). Альтернативный вариант - использовать набор helm чартов от [bitnami](https://github.com/bitnami/charts/tree/main/bitnami).
 
+---
+### Решение. Подготовка cистемы мониторинга и деплой приложения
+
+1. local-path-provisioner — чтобы у Prometheus, Grafana и Alertmanager были PVC:  
+
+```
+kubectl get storageclass
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+```
+2. Лейблы нод. Контроллер ingress-nginx с nodeSelector должен знать, куда идти (иначе может улететь на cp-1, и smoke test и Grafana останутся без входа):  
+
+```
+kubectl label node cp-1 role=control --overwrite
+kubectl label node wk-1 wk-2 role=worker --overwrite
+```
+3. Репозитории helm:  
+
+```
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
+4. ingress-nginx — hostNetwork и hostPort, чтобы порт 80 слушался прямо на ноде:  
+
+```
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  -n ingress-nginx --create-namespace \
+  --set controller.hostNetwork=true \
+  --set controller.hostPort.enabled=true \
+  --set controller.service.type=ClusterIP \
+  --set controller.replicaCount=1 \
+  --set controller.nodeSelector.role=worker \
+  --set controller.admissionWebhooks.enabled=false
+```
+
+Ждём под контроллера:  
+
+```
+kubectl -n ingress-nginx get pods -w
+```
+![Под контроллера запущен](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/015.png)
+
+![Под контроллера запущен](img/015.png)
+
+
+5. Установка `kube-prometheus-stack`. Шаблон values содержит ${GRAFANA_EXTERNAL_IP}, который надо подставить вручную (в deploy.sh это делает envsubst):  
+
+[**kps-values.yaml.template**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/monitoring/kps-values.yaml.template)  
+
+```
+export GRAFANA_EXTERNAL_IP="$WK_EXTERNAL_IP"
+envsubst '${GRAFANA_EXTERNAL_IP}' < k8s-config/monitoring/kps-values.yaml.template > /tmp/kps-values.rendered.yaml
+grep root_url /tmp/kps-values.rendered.yaml   # проверим, что IP подставился
+helm upgrade --install kps prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace \
+  -f /tmp/kps-values.rendered.yaml --atomic
+```
+
+![Результат выполнения](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/016.png)
+
+![Результат выполнения](img/016.png)
+
+6. Установка `Ingress Grafana`:  
+
+[**grafana-ingress.yaml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/monitoring/grafana-ingress.yaml)  
+
+```
+kubectl apply -f k8s-config/monitoring/grafana-ingress.yaml
+```
+
+Дождитесь, когда все поды в `monitoring` и `ingress-nginx` станут `Running`:  
+
+```
+kubectl get pods -A -w
+```
+
+![Поды активны](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/017.png)
+
+![Поды активны](img/017.png)
+
+7. Проверяем web-интерфейс Grafana и проходим авторизацию с заранее заданным в grafana-values.yaml паролем. Проверяем состояние кластера:  
+
+![Мониторинг работает](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/018.png)
+
+![Мониторинг работает](img/018.png)
+
+8. Установка приложения.  
+
+[**manifests.yaml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/app/manifests.yaml)  
+
+Подставляем свой логин Docker Hub и тег вместо заглушки APP_IMAGE:  
+
+```
+export DOCKERHUB_USER="slov1977"          # ваш логин
+APP_IMAGE="$DOCKERHUB_USER/devops-diplom-app:v1.0.0"
+sed "s|image: APP_IMAGE|image: ${APP_IMAGE}|" k8s-config/app/manifests.yaml > /tmp/manifests.yaml
+grep "image:" /tmp/manifests.yaml         # убедиться, что подмена сработала
+kubectl apply -f /tmp/manifests.yaml
+```
+
+Ждём деплой и проверяем:  
+
+```
+kubectl -n app rollout status deployment/devops-diplom-app
+kubectl -n app get pods -o wide
+```
+![Приложение установлено](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/019.png)
+
+![Приложение установлено](img/019.png)
+
+
+![Curl запрос к приложению](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/020.png)
+
+![Curl запрос к приложению](img/020.png)
+
+
+![Приложение в браузере](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/021.png)
+
+![Приложение в браузере](img/021.png)
+
+---
 ### Деплой инфраструктуры в terraform pipeline
 
 1. Если на первом этапе вы не воспользовались [Terraform Cloud](https://app.terraform.io/), то задеплойте и настройте в кластере [atlantis](https://www.runatlantis.io/) для отслеживания изменений инфраструктуры. Альтернативный вариант 3 задания: вместо Terraform Cloud или atlantis настройте на автоматический запуск и применение конфигурации terraform из вашего git-репозитория в выбранной вами CI-CD системе при любом комите в main ветку. Предоставьте скриншоты работы пайплайна из CI/CD системы.
@@ -111,7 +473,29 @@
 2. Http доступ на 80 порту к web интерфейсу grafana.
 3. Дашборды в grafana отображающие состояние Kubernetes кластера.
 4. Http доступ на 80 порту к тестовому приложению.
-5. Atlantis или terraform cloud или ci/cd-terraform
+5. Atlantis или terraform cloud или ci/cd-terraform  
+
+---
+### Решение. Деплой инфраструктуры в terraform pipeline  
+
+Настраиваем автоматическое развертывание инфраструктуры terraform через Github Action.  
+
+- Cоздаем директорию .github/workflows/ и в ней файл [**terraform.yml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/.github/workflows/terraform.yml)  
+
+- Добавляем секретные данные, которые будут передаваться при исполнении манифестов
+
+![Секреты в Git Action](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/022.png)
+
+![Секреты в Git Action](img/022.png)
+
+- Манифест выполняется при ручном запуске, а также при `git push` кода `Terraform` в `main` ветку репозитория.  
+
+- Результат выполнения манифеста.
+
+![Секреты в Git Action](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/022.png)
+
+![Секреты в Git Action](img/022.png)
+
 ---
 ### Установка и настройка CI/CD
 
@@ -129,6 +513,39 @@
 1. Интерфейс ci/cd сервиса доступен по http.
 2. При любом коммите в репозиторие с тестовым приложением происходит сборка и отправка в регистр Docker образа.
 3. При создании тега (например, v1.0.0) происходит сборка и отправка с соответствующим label в регистри, а также деплой соответствующего Docker образа в кластер Kubernetes.
+
+---
+### Решение. Установка и настройка CI/CD  
+
+Настраиваем ci/cd систему для автоматической сборки docker image и деплоя приложения при изменении кода с помощью GitHub Actions.  
+
+- Для этого в [репозитории](https://github.com/SLOV1977/devops-diplom-app) приложения создаем файл `.github/workflows/ci-cd.yml`.  
+
+- Добавляем в `GitHub Action` данные для `DockerHub` и `Kubernetes`-кластера.  
+
+![Секреты в Git Action](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/024.png)
+
+![Секреты в Git Action](img/024.png)
+
+- Редактируем `index.html` и пишем в коммите комментарий `release v1.0.3` и отправляем в ветку `main` в `Github`:
+
+![Два отдельных запуска `workflow` с тегом v1.0.3](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/025.png)
+
+![Два отдельных запуска `workflow` с тегом v1.0.3](img/025.png)
+
+- Проверяем образы на `DockerHub`. Новый образ с новым `tag` добавился в `DockerHub`:  
+
+![Обновлённый до версии v1.0.3 образ на DockerHub](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/026.png)
+
+![Обновлённый до версии v1.0.3 образ на DockerHub](img/026.png)
+
+- Web-страница приложения обновилась.
+
+![Страница приложения в браузере](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/027.png)
+
+![Страница приложения в браузере](img/027.png)
+
+Автоматическая сборка docker-image с новым тегом и деплой приложения в кластер прошли успешно.  
 
 ---
 ## Что необходимо для сдачи задания?

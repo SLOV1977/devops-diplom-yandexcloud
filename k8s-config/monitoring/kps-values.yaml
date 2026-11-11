@@ -1,0 +1,87 @@
+fullnameOverride: kps
+
+# ── Prometheus ────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    retentionSize: 4GB
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    # Хранилище: local-path, явно, а не через default StorageClass
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    # Смотреть мониторы из всего кластера, а не только с лейблом релиза
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+
+# ── Alertmanager ──────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+# ── Grafana ───────────────────────────────────────────────
+grafana:
+  adminUser: admin
+  adminPassword: "diplom-admin"        # смените на свой пароль
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    accessModes: ["ReadWriteOnce"]
+    size: 2Gi
+  service:
+    type: ClusterIP
+    port: 80
+  # Ингресс делаем своим манифестом grafana-ingress.yaml
+  ingress:
+    enabled: false
+  # Grafana живёт под подпутём /grafana — она должна об этом знать,
+  # иначе редиректит на /login без префикса и попадает в приложение
+  grafana.ini:
+    server:
+      root_url: http://93.77.162.30/grafana/
+      serve_from_sub_path: true
+  # Скачивать готовые дашборды с grafana.com — удобно для диплома
+  sidecar:
+    dashboards:
+      enabled: true
+      allowUiUpdates: true
+
+# ── Оператор и экспортёры ─────────────────────────────────
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  admissionWebhooks:
+    enabled: true
+
+kubeStateMetrics:
+  enabled: true
+nodeExporter:
+  enabled: true
+
+defaultRules:
+  create: true

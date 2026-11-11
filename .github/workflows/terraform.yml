@@ -1,0 +1,91 @@
+name: terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/main/**'
+      - 'terraform/bootstrap/**'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write SA key
+        run: |
+          mkdir -p ~/.yc
+          echo "${{ secrets.YC_SA_KEY_JSON }}" > ~/.yc/terraform-infra-key.json
+          chmod 600 ~/.yc/terraform-infra-key.json
+
+      - name: Check state bucket exists
+        id: bucket
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_STATE_SECRET_KEY }}
+        run: |
+          if aws s3api head-bucket \
+            --endpoint-url=https://storage.yandexcloud.net \
+            --bucket tf-state-slov-2026 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Bootstrap init
+        if: steps.bucket.outputs.exists == 'false'
+        working-directory: terraform/bootstrap
+        run: terraform init -input=false
+        env:
+          TF_VAR_yc_service_account_key_file: ~/.yc/terraform-infra-key.json
+          TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+
+      - name: Bootstrap apply (create SA + bucket)
+        if: steps.bucket.outputs.exists == 'false'
+        working-directory: terraform/bootstrap
+        run: terraform apply -auto-approve -input=false
+        env:
+          TF_VAR_yc_service_account_key_file: ~/.yc/terraform-infra-key.json
+          TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+          TF_VAR_tf_state_bucket_name: tf-state-slov-2026
+
+      - name: Export bootstrap outputs
+        if: steps.bucket.outputs.exists == 'false'
+        working-directory: terraform/bootstrap
+        run: |
+          echo "STATE_ACCESS_KEY=$(terraform output -raw state_access_key)" >> "$GITHUB_ENV"
+          echo "STATE_SECRET_KEY=$(terraform output -raw state_secret_key)" >> "$GITHUB_ENV"
+
+      - name: Terraform init
+        working-directory: terraform/main
+        run: terraform init -input=false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.STATE_ACCESS_KEY || secrets.YC_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.STATE_SECRET_KEY || secrets.YC_STATE_SECRET_KEY }}
+
+      - name: Terraform plan
+        working-directory: terraform/main
+        run: terraform plan -input=false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.STATE_ACCESS_KEY || secrets.YC_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.STATE_SECRET_KEY || secrets.YC_STATE_SECRET_KEY }}
+          TF_VAR_yc_service_account_key_file: ~/.yc/terraform-infra-key.json
+          TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+
+      - name: Terraform apply
+        working-directory: terraform/main
+        run: terraform apply -auto-approve -input=false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.STATE_ACCESS_KEY || secrets.YC_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.STATE_SECRET_KEY || secrets.YC_STATE_SECRET_KEY }}
+          TF_VAR_yc_service_account_key_file: ~/.yc/terraform-infra-key.json
+          TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}

@@ -1,0 +1,16 @@
+- name: Прочитать admin.conf с мастера
+  ansible.builtin.slurp:
+    src: /etc/kubernetes/admin.conf
+  register: admin_conf_raw
+
+- name: Заменить внутренний IP на внешний
+  ansible.builtin.set_fact:
+    kubeconfig_external: "{{ (admin_conf_raw.content | b64decode) | regex_replace('https://[0-9.]+:6443', 'https://' ~ ansible_host ~ ':6443') }}"
+
+- name: Сохранить kubeconfig локально в artifacts
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_external }}"
+    dest: "{{ playbook_dir }}/inventory/artifacts/admin.conf"
+    mode: "0600"
+  delegate_to: localhost
+  become: false          # ← эта строка: писать от вашего пользователя, не от root

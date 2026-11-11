@@ -1,0 +1,27 @@
+- name: Репозиторий Docker
+  ansible.builtin.shell: |
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+      https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+      > /etc/apt/sources.list.d/docker.list
+    apt-get update -qq
+  changed_when: true
+
+- name: Установить containerd
+  ansible.builtin.apt:
+    name: containerd
+    state: present
+
+- name: Создать конфиг containerd (SystemdCgroup = true)
+  ansible.builtin.shell: |
+    mkdir -p /etc/containerd
+    containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' \
+      > /etc/containerd/config.toml
+  changed_when: true
+  notify: Restart containerd
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers

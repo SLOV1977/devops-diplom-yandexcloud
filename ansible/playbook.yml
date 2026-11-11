@@ -1,0 +1,25 @@
+- name: Подготовка всех нод
+  hosts: all
+  become: true
+  roles:
+    - prereq
+    - containerd
+    - kubeadm
+
+- name: Инициализация control-plane
+  hosts: control
+  become: true
+  roles:
+    - control-plane
+
+- name: Подключение worker-нод
+  hosts: workers
+  become: true
+  roles:
+    - join-workers
+
+- name: Забрать kubeconfig
+  hosts: control
+  become: true
+  roles:
+    - kubeconfig

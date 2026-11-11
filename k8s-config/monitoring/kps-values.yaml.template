@@ -1,0 +1,87 @@
+fullnameOverride: kps
+
+# ── Prometheus ────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    retentionSize: 4GB
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    # Мониторы и правила из любого namespace, не только с лейблом релиза
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+
+# ── Alertmanager ──────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    retention: 24h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+# ── Grafana ───────────────────────────────────────────────
+grafana:
+  adminUser: admin
+  adminPassword: "diplom-admin"     # для диплома ок; в реальном проекте — из секретов
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    accessModes: ["ReadWriteOnce"]
+    size: 2Gi
+  service:
+    type: ClusterIP
+    port: 80
+  # Ингресс — отдельным манифестом grafana-ingress.yaml (pass-through, без rewrite)
+  ingress:
+    enabled: false
+  # Grafana живёт под подпутём /grafana.
+  # ${GRAFANA_EXTERNAL_IP} подставляет deploy.sh из terraform output —
+  # единственного источника истины по IP (тот же, что в hosts.yaml)
+  grafana.ini:
+    server:
+      root_url: http://${GRAFANA_EXTERNAL_IP}/grafana/
+      serve_from_sub_path: true
+  sidecar:
+    dashboards:
+      enabled: true
+      allowUiUpdates: true
+
+# ── Оператор и экспортёры ─────────────────────────────────
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  admissionWebhooks:
+    enabled: true
+
+kubeStateMetrics:
+  enabled: true
+nodeExporter:
+  enabled: true
+
+defaultRules:
+  create: true
