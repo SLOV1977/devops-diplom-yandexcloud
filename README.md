@@ -492,9 +492,9 @@ kubectl -n app get pods -o wide
 
 - Результат выполнения манифеста.
 
-![Секреты в Git Action](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/022.png)
+![Деплой прошёл успешно](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/023.png)
 
-![Секреты в Git Action](img/022.png)
+![Деплой прошёл успешно](img/023.png)
 
 ---
 ### Установка и настройка CI/CD
