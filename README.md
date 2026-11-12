@@ -447,6 +447,51 @@ kubectl -n app get pods -o wide
 
 ![Приложение в браузере](img/021.png)
 
+Для распределения нагрузки и обеспечения отказоустойчивости добавляем балансировщик нагрузки и таргет-групп в файл terraform/main/main.tf:  
+
+```
+resource "yandex_lb_network_load_balancer" "ingress" {
+  name      = "k8s-ingress-nlb"
+  region_id = "ru-central1"
+  type      = "external"
+
+  listener {
+    name        = "http"
+    port        = 80
+    target_port = 30080          # NodePort ingress-nginx
+
+    external_address_spec {
+      address = yandex_vpc_address.ingress.external_ipv4_address[0].address
+    }
+  }
+
+  attached_target_group {
+    target_group_id = yandex_lb_target_group.ingress.id
+
+    healthcheck {
+      name                = "http-health"
+      interval            = 10
+      timeout             = 5
+      healthy_threshold   = 2
+      unhealthy_threshold = 3
+
+      http_options {
+        port = 30080
+        path = "/healthz"
+      }
+    }
+  }
+}
+```
+
+И применяем изменения:  
+
+```
+cd terraform/main
+terraform init
+terraform apply
+```
+
 ---
 ### Деплой инфраструктуры в terraform pipeline
 
