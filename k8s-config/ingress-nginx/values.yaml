@@ -1,0 +1,11 @@
+controller:
+  # По контроллеру на каждый воркер: один воркер уходит в прерывание —
+  # второй продолжает принимать трафик
+  kind: DaemonSet
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
+  admissionWebhooks:
+    enabled: false   # на нодах 2/4 ГБ экономим ресурсы

@@ -1,3 +1,12 @@
+# первый запуск падает на отсутствии inventory/artifacts
+- name: Создать каталог для артефактов
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/inventory/artifacts"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
 - name: Прочитать admin.conf с мастера
   ansible.builtin.slurp:
     src: /etc/kubernetes/admin.conf
@@ -13,4 +22,4 @@
     dest: "{{ playbook_dir }}/inventory/artifacts/admin.conf"
     mode: "0600"
   delegate_to: localhost
-  become: false          # ← эта строка: писать от вашего пользователя, не от root
+  become: false

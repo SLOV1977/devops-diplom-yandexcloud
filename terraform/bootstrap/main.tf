@@ -17,6 +17,16 @@ resource "yandex_resourcemanager_folder_iam_member" "infra_editor" {
   member    = "serviceAccount:${yandex_iam_service_account.infra.id}"
 }
 
+# ─── Права для функции автозапуска прерываемых ВМ ────────
+# Триггер-таймер будет вызывать Cloud Function от имени этого же СА.
+# compute-операции уже покрыты ролью editor,
+# поэтому добавляем только право вызывать функции.
+resource "yandex_resourcemanager_folder_iam_member" "infra_function_invoker" {
+  folder_id = var.yc_folder_id
+  role      = "functions.functionInvoker"
+  member    = "serviceAccount:${yandex_iam_service_account.infra.id}"
+}
+
 # Authorized key — им будет авторизоваться конфигурация main
 resource "yandex_iam_service_account_key" "infra_auth_key" {
   service_account_id = yandex_iam_service_account.infra.id
@@ -28,7 +38,7 @@ resource "yandex_iam_service_account_key" "infra_auth_key" {
 locals {
   infra_key_json = jsonencode({
     id                 = yandex_iam_service_account_key.infra_auth_key.id
-    service_account_id = yandex_iam_service_account.infra.id
+    service_account_id = yandex_iam_service_account_key.infra_auth_key.service_account_id
     created_at         = yandex_iam_service_account_key.infra_auth_key.created_at
     key_algorithm      = yandex_iam_service_account_key.infra_auth_key.key_algorithm
     public_key         = yandex_iam_service_account_key.infra_auth_key.public_key
@@ -52,7 +62,7 @@ resource "yandex_storage_bucket" "tf_state" {
     read = false
     list = false
   }
-  
+
   force_destroy = true
 }
 

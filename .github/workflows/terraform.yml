@@ -6,6 +6,15 @@ on:
     paths:
       - 'terraform/main/**'
       - 'terraform/bootstrap/**'
+      - '.github/workflows/terraform.yml'   # .apply при правках пайплайна
+
+# минимальные права и запрет параллельных apply
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
 
 jobs:
   apply:
@@ -13,7 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Write SA key (base64 decode)
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.0
+
+      - name: Write SA key
         run: |
           mkdir -p ~/.yc
           echo "${{ secrets.YC_SA_KEY_JSON_B64 }}" | base64 -d > ~/.yc/terraform-infra-key.json
@@ -33,10 +46,6 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.14.0
 
       - name: Bootstrap init
         if: steps.bucket.outputs.exists == 'false'

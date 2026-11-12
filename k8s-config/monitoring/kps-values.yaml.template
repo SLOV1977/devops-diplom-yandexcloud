@@ -21,6 +21,14 @@ prometheus:
           resources:
             requests:
               storage: 5Gi
+    # local-path создаёт каталог PVC от root, а контейнер по умолчанию
+    # работает под uid 1000 — отсюда "permission denied" на queries.active.
+    # Поэтому стейтфулсет запускается под root (known limitation для диплома)
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      fsGroup: 0
+      runAsNonRoot: false
     # Мониторы и правила из любого namespace, не только с лейблом релиза
     serviceMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelector: {}
@@ -33,6 +41,12 @@ prometheus:
 alertmanager:
   alertmanagerSpec:
     retention: 24h
+    # та же причина, что у Prometheus: PVC на local-path создаётся от root
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      fsGroup: 0
+      runAsNonRoot: false
     storage:
       volumeClaimTemplate:
         spec:
@@ -51,6 +65,11 @@ grafana:
     storageClassName: local-path
     accessModes: ["ReadWriteOnce"]
     size: 2Gi
+  # дефолтный uid Grafana — 472; с PVC от root может не стартовать, поэтому тоже root
+  podSecurityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    fsGroup: 0
   service:
     type: ClusterIP
     port: 80
@@ -58,7 +77,7 @@ grafana:
   ingress:
     enabled: false
   # Grafana живёт под подпутём /grafana.
-  # ${GRAFANA_EXTERNAL_IP} подставляет deploy.sh из terraform output —
+  # ${GRAFANA_EXTERNAL_IP} подставляется при рендере из terraform output —
   # единственного источника истины по IP (тот же, что в hosts.yaml)
   grafana.ini:
     server:

@@ -1,0 +1,21 @@
+"all":
+  "children":
+    "control":
+      "hosts":
+        "cp-1": null
+    "workers":
+      "hosts":
+        "wk-1": null
+        "wk-2": null
+  "hosts":
+    "cp-1":
+      "ansible_host": "84.201.174.198"
+      "internal_ip": "10.0.1.7"
+    "wk-1":
+      "ansible_host": "81.26.186.164"
+      "internal_ip": "10.0.2.33"
+    "wk-2":
+      "ansible_host": "153.51.116.131"
+      "internal_ip": "10.0.3.26"
+  "vars":
+    "ansible_user": "ubuntu"

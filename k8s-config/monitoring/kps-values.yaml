@@ -13,7 +13,6 @@ prometheus:
         memory: 512Mi
       limits:
         memory: 1Gi
-    # Хранилище: local-path, явно, а не через default StorageClass
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -22,7 +21,15 @@ prometheus:
           resources:
             requests:
               storage: 5Gi
-    # Смотреть мониторы из всего кластера, а не только с лейблом релиза
+    # local-path создаёт каталог PVC от root, а контейнер по умолчанию
+    # работает под uid 1000 — отсюда "permission denied" на queries.active.
+    # Поэтому стейтфулсет запускается под root (known limitation для диплома)
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      fsGroup: 0
+      runAsNonRoot: false
+    # Мониторы и правила из любого namespace, не только с лейблом релиза
     serviceMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelector: {}
     podMonitorSelectorNilUsesHelmValues: false
@@ -33,6 +40,13 @@ prometheus:
 # ── Alertmanager ──────────────────────────────────────────
 alertmanager:
   alertmanagerSpec:
+    retention: 24h
+    # та же причина, что у Prometheus: PVC на local-path создаётся от root
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      fsGroup: 0
+      runAsNonRoot: false
     storage:
       volumeClaimTemplate:
         spec:
@@ -45,25 +59,30 @@ alertmanager:
 # ── Grafana ───────────────────────────────────────────────
 grafana:
   adminUser: admin
-  adminPassword: "diplom-admin"        # смените на свой пароль
+  adminPassword: "diplom-admin"     # для диплома ок; в реальном проекте — из секретов
   persistence:
     enabled: true
     storageClassName: local-path
     accessModes: ["ReadWriteOnce"]
     size: 2Gi
+  # дефолтный uid Grafana — 472; с PVC от root может не стартовать, поэтому тоже root
+  podSecurityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    fsGroup: 0
   service:
     type: ClusterIP
     port: 80
-  # Ингресс делаем своим манифестом grafana-ingress.yaml
+  # Ингресс — отдельным манифестом grafana-ingress.yaml (pass-through, без rewrite)
   ingress:
     enabled: false
-  # Grafana живёт под подпутём /grafana — она должна об этом знать,
-  # иначе редиректит на /login без префикса и попадает в приложение
+  # Grafana живёт под подпутём /grafana.
+  # 84.201.174.104 подставляется при рендере из terraform output —
+  # единственного источника истины по IP (тот же, что в hosts.yaml)
   grafana.ini:
     server:
-      root_url: http://93.77.162.30/grafana/
+      root_url: http://84.201.174.104/grafana/
       serve_from_sub_path: true
-  # Скачивать готовые дашборды с grafana.com — удобно для диплома
   sidecar:
     dashboards:
       enabled: true

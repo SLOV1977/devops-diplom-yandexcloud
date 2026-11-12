@@ -3,8 +3,6 @@ data "yandex_compute_image" "ubuntu" {
 }
 
 # ─── Сеть ────────────────────────────────────────────────
-# Подсети во всех трёх зонах (требование задания: VPC с подсетями
-# в разных зонах доступности).
 resource "yandex_vpc_network" "k8s" {
   name = "k8s-network"
 }
@@ -26,10 +24,25 @@ resource "yandex_vpc_subnet" "k8s" {
   v4_cidr_blocks = [each.value]
 }
 
-# ─── Виртуальные машины ─────────────────────────────────
-# control-plane не прерываемая: падение мастера = падение кластера.
-# worker'ы — прерываемые, зоны задаются переменной worker_zones,
-# core_fraction = 50 на standard-v3.
+# Control-plane — обычная ВМ: закрепляем статический IP напрямую.
+resource "yandex_vpc_address" "control_plane" {
+  name = "k8s-cp-ip"
+  external_ipv4_address {
+    zone_id = "ru-central1-a"
+  }
+}
+
+# Прерываемым ВМ закрепить IP нельзя, поэтому «лицо» кластера —
+# NLB со своим выделенным адресом. Адрес живёт, пока жив ресурс,
+# независимо от состояния прерываемых воркеров.
+resource "yandex_vpc_address" "ingress" {
+  name = "k8s-ingress-ip"
+  external_ipv4_address {
+    zone_id = "ru-central1-a"
+  }
+}
+
+# ─── Виртуальные машины ──────────────────────────────────
 locals {
   control_plane = {
     "cp-1" = {
@@ -48,7 +61,6 @@ locals {
       memory      = var.worker_flavor.memory
     }
   }
-
   nodes = merge(local.control_plane, local.workers)
 }
 
@@ -81,6 +93,7 @@ resource "yandex_compute_instance" "node" {
   network_interface {
     subnet_id = yandex_vpc_subnet.k8s[each.value.zone].id
     nat       = true
+    nat_ip_address = startswith(each.key, "cp-") ? yandex_vpc_address.control_plane.external_ipv4_address[0].address : null
   }
 
   metadata = {
@@ -88,6 +101,66 @@ resource "yandex_compute_instance" "node" {
       vm_user = var.vm_user
       ssh_key = var.ssh_public_key
     })
+  }
+
+  # при замене прерываемой ноды сначала создать новую,
+  # потом удалить старую (меньше простоя таргетов NLB)
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# ───────── NLB → NodePort ingress-nginx ─────────────────
+# Таргеты — внутренние IP воркеров: сохраняются при остановке ВМ,
+# а при замене ВМ Terraform обновит их сам.
+# dynamic "target" покрывает любое количество воркеров
+resource "yandex_lb_target_group" "ingress" {
+  name      = "k8s-ingress-tg"
+  region_id = "ru-central1"
+
+  dynamic "target" {
+    for_each = {
+      for name, vm in yandex_compute_instance.node :
+      name => vm if startswith(name, "wk-")
+    }
+
+    content {
+      subnet_id = yandex_vpc_subnet.k8s[target.value.zone].id
+      address   = target.value.network_interface[0].ip_address
+    }
+  }
+}
+
+resource "yandex_lb_network_load_balancer" "ingress" {
+  name      = "k8s-ingress-nlb"
+  region_id = "ru-central1"
+  type      = "external"
+
+  listener {
+    name        = "http"
+    port        = 80
+    target_port = 30080          # NodePort ingress-nginx
+
+    external_address_spec {
+      address = yandex_vpc_address.ingress.external_ipv4_address[0].address
+    }
+  }
+
+  attached_target_group {
+    target_group_id = yandex_lb_target_group.ingress.id
+
+    healthcheck {
+      name                = "http-health"
+      interval            = 10
+      timeout             = 5
+      healthy_threshold   = 2
+      unhealthy_threshold = 3
+
+      http_options {
+        port = 30080
+        path = "/healthz"
+      }
+    }
   }
 }
 
@@ -101,25 +174,18 @@ locals {
       role        = startswith(name, "cp-") ? "kube_control_plane" : "kube_node"
     }
   }
-}
 
-output "nodes" {
-  value = local.node_output
-}
-
-# Инвентарь для самописного ansible-плейбука:
-# ansible_host — внешний IP (SSH с вашей машины),
-# internal_ip — внутренний IP (кластерный трафик, ceritificates, join).
-output "ansible_inventory" {
-  value = yamlencode({
+  ansible_inventory_yaml = yamlencode({
     all = {
+      vars = {
+        ansible_user = var.vm_user
+      }
       hosts = {
         for name, n in local.node_output : name => {
           ansible_host = n.external_ip
           internal_ip  = n.internal_ip
         }
       }
-
       children = {
         control = {
           hosts = { for name, n in local.node_output : name => null if n.role == "kube_control_plane" }
@@ -130,4 +196,25 @@ output "ansible_inventory" {
       }
     }
   })
+}
+
+output "nodes" {
+  value = local.node_output
+}
+
+output "ansible_inventory" {
+  value = local.ansible_inventory_yaml
+}
+
+output "ingress_external_ip" {
+  value = yandex_vpc_address.ingress.external_ipv4_address[0].address
+}
+
+# ─── Автообновление инвентаря Ansible ────────────────────
+# Инвентарь пишется в файл при каждом изменении состава/адресов
+# ВМ — ручной шаг «terraform output > hosts.yaml» больше не нужен.
+resource "local_file" "ansible_inventory" {
+  content         = local.ansible_inventory_yaml
+  filename        = "${path.module}/../ansible/inventory/hosts.yaml"
+  file_permission = "0644"
 }

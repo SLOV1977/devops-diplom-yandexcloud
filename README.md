@@ -157,12 +157,8 @@ terraform destroy && terraform apply
 ### Решение. Создание Kubernetes кластера  
 
 **1.** При создании инфраструктуры при помощи `Terraform` были созданы ВМ в разных подсетях и зонах доступности для создания кластера Kubernetes ("cp-1" - `control-plane` (master), "wk-1" и "wk-2" - воркеры).  
-Генерируем ansible-инвентарь для установки Kubernetes кластера.
+Ansible-инвентарь для установки Kubernetes кластера был сгенерирован автоматически `Terraform`.  
 
-```
-terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yaml
-cat ../../ansible/inventory/hosts.yaml
-```
 ![Содержание сгенерированного `hosts.yaml`](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/009.png)
 
 ![Содержание сгенерированного `hosts.yaml`](img/009.png)
@@ -184,7 +180,7 @@ cat ../../ansible/inventory/hosts.yaml
 
 ```
 cd ../../ansible
-ansible-playbook -i inventory/hosts.yaml playbook.yml -b -u ubuntu
+ansible-playbook -i inventory/hosts.yaml playbook.yml -v
 ```
 **4.** Настраиваем kubeconfig и проверяем кластер
 
@@ -226,7 +222,14 @@ kubectl get pods --all-namespaces
 ### Решение. Создание тестового приложения
 
 **1.** Создаем отдельный [репозиторий](https://github.com/SLOV1977/devops-diplom-app) для тестового приложения.  
-**2.** Создаем статичную web-страницу:  
+**2.** Клонируем его себе в локальное расположение и переходим в него:
+```
+cd ../..
+git clone https://github.com/SLOV1977/devops-diplom-app.git
+cd devops-diplom-app
+```
+
+**3.** Создаем статичную web-страницу:  
 
 ```
 <!DOCTYPE html>
@@ -285,7 +288,7 @@ kubectl get pods --all-namespaces
 </body>
 </html>
 ```
-**3.** Подготавливаем `Dockerfile` для создания образа приложения:  
+**4.** Подготавливаем `Dockerfile` для создания образа приложения:  
 
 ```
 FROM nginx:1.27-alpine
@@ -297,7 +300,7 @@ EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O - http://localhost/ || exit 1
 ```
-**4.** Создаём образ приложения:  
+**5.** Создаём образ приложения:  
 
 ```
 docker build -t slov1977/devops-diplom-app:v1.0.0 .
@@ -349,33 +352,17 @@ docker push slov1977/devops-diplom-app:v1.0.0
 **1.** local-path-provisioner — чтобы у Prometheus, Grafana и Alertmanager были PVC:  
 
 ```
-kubectl get storageclass
+cd ../devops-diplom-yandexcloud/ansible
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
 ```
-**2.** Лейблы нод. Контроллер ingress-nginx с nodeSelector должен знать, куда идти (иначе может улететь на cp-1, и smoke test и Grafana останутся без входа):  
+
+**2.** ingress-nginx (DaemonSet, NodePort 30080):  
 
 ```
-kubectl label node cp-1 role=control --overwrite
-kubectl label node wk-1 wk-2 role=worker --overwrite
-```
-**3.** Репозитории helm:  
-
-```
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
-```
-**4.** ingress-nginx — hostNetwork и hostPort, чтобы порт 80 слушался прямо на ноде:  
-
-```
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -n ingress-nginx --create-namespace \
-  --set controller.hostNetwork=true \
-  --set controller.hostPort.enabled=true \
-  --set controller.service.type=ClusterIP \
-  --set controller.replicaCount=1 \
-  --set controller.nodeSelector.role=worker \
-  --set controller.admissionWebhooks.enabled=false
+  -f k8s-config/ingress-nginx/values.yaml
 ```
 
 Ждём под контроллера:  
@@ -388,24 +375,23 @@ kubectl -n ingress-nginx get pods -w
 ![Под контроллера запущен](img/015.png)
 
 
-**5.** Установка `kube-prometheus-stack`. Шаблон values содержит ${GRAFANA_EXTERNAL_IP}, который надо подставить вручную:  
+**3.** Установка `kube-prometheus-stack`. Шаблон values содержит ${GRAFANA_EXTERNAL_IP}, который надо подставить вручную:  
 
 [**kps-values.yaml.template**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/monitoring/kps-values.yaml.template)  
 
 ```
-export GRAFANA_EXTERNAL_IP="$WK_EXTERNAL_IP"
-envsubst '${GRAFANA_EXTERNAL_IP}' < k8s-config/monitoring/kps-values.yaml.template > /tmp/kps-values.rendered.yaml
-grep root_url /tmp/kps-values.rendered.yaml   # проверим, что IP подставился
+cd ..
+export INGRESS_IP=$(terraform -chdir=terraform/main output -raw ingress_external_ip)
+echo $INGRESS_IP
+sed "s|\${GRAFANA_EXTERNAL_IP}|${INGRESS_IP}|g" \
+  k8s-config/monitoring/kps-values.yaml.template > k8s-config/monitoring/kps-values.yaml
+sed 's/${GRAFANA_EXTERNAL_IP}/84.201.174.104/g' kps-values.yaml.template > kps-values.yaml
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
 helm upgrade --install kps prometheus-community/kube-prometheus-stack \
-  -n monitoring --create-namespace \
-  -f /tmp/kps-values.rendered.yaml --atomic
+  -n monitoring --create-namespace -f /tmp/kps-values.yaml
 ```
 
-![Результат выполнения](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/img/016.png)
-
-![Результат выполнения](img/016.png)
-
-**6.** Установка `Ingress Grafana`:  
+**4.** Установка `Ingress Grafana`:  
 
 [**grafana-ingress.yaml**](https://github.com/SLOV1977/devops-diplom-yandexcloud/tree/main/k8s-config/monitoring/grafana-ingress.yaml)  
 
@@ -438,9 +424,7 @@ kubectl get pods -A -w
 ```
 export DOCKERHUB_USER="slov1977"          # ваш логин
 APP_IMAGE="$DOCKERHUB_USER/devops-diplom-app:v1.0.0"
-sed "s|image: APP_IMAGE|image: ${APP_IMAGE}|" k8s-config/app/manifests.yaml > /tmp/manifests.yaml
-grep "image:" /tmp/manifests.yaml         # убедиться, что подмена сработала
-kubectl apply -f /tmp/manifests.yaml
+sed "s|APP_IMAGE|${APP_IMAGE}|g" k8s-config/app/manifests.yaml | kubectl apply -f -
 ```
 
 Ждём деплой и проверяем:  

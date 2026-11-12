@@ -1,7 +1,7 @@
 # секреты
 .authorized_key.json
 terraform/main/terraform-infra-key.json
-terraform/**/*.tfvars
+terraform/*/*.tfvars
 
 # состояние terraform
 **/.terraform/

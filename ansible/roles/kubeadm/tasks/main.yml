@@ -23,3 +23,8 @@
     name: "{{ item }}"
     selection: hold
   loop: [kubelet, kubeadm, kubectl]
+
+- name: Включить kubelet в автозапуск
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: true
