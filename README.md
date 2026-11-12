@@ -587,3 +587,10 @@ terraform apply
 6. Ссылка на тестовое приложение и веб интерфейс Grafana с данными доступа.
 7. Все репозитории рекомендуется хранить на одном ресурсе (github, gitlab)
 
+## Решение. Что необходимо для сдачи задания?  
+
+[Репозиторий приложения](https://github.com/SLOV1977/devops-diplom-app)
+[Репозиторий дипломной работы](https://github.com/SLOV1977/devops-diplom-yandexcloud)
+[Docker image в DockerHub](https://hub.docker.com/repository/docker/slov1977/devops-diplom-app/general)
+[Тестовое приложение](http://84.201.174.104/)
+[Веб интерфейс Grafana](http://84.201.174.104/grafana) (admin:diplom-admin)
